@@ -1,4 +1,5 @@
 import json
+from math import pi
 from pathlib import Path
 
 import pytest
@@ -47,3 +48,58 @@ async def test_volume_endpoint(client):
     body = response.json()
     assert body["mesh_volume"] == pytest.approx(GOLDEN["esfera"]["mesh_volume"], rel=1e-6)
     assert body["domain_volume"] == pytest.approx(27.0)
+
+
+
+def test_mesh_volume_of_region_touching_the_border():
+    estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
+
+    assert estimate.mesh_volume == pytest.approx(4.0)
+
+    
+
+def test_voxel_volume_of_region_touching_the_border():
+    estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
+
+    assert estimate.voxel_volume == pytest.approx(4.0)
+
+    
+
+def test_mesh_volume_does_not_depend_on_position():
+    near = estimate_volume("x**2 + y**2 + z**2 - 1", [[-1.5, 1.5]] * 3, 64)
+    far = estimate_volume(
+        "(x - 600000)**2 + (y - 600000)**2 + (z - 600000)**2 - 1", [[599998.5, 600001.5]] * 3, 64
+    )
+
+    assert far.mesh_volume == pytest.approx(near.mesh_volume, rel=1e-6)
+
+    
+
+ANALYTIC_VOLUMES = {
+    "esfera": 4 / 3 * pi,
+    "toro": 2 * pi**2 * 1 * 0.25**2,
+    "gyroide": (2 * pi) ** 3 / 2,
+}
+
+
+@pytest.mark.parametrize("slug", sorted(ANALYTIC_VOLUMES))
+def test_volumes_match_analytic_value(slug):
+    function = EXAMPLES_BY_SLUG[slug].function
+
+    estimate = estimate_volume(function.expression, function.domain, 128)
+
+    assert estimate.mesh_volume == pytest.approx(ANALYTIC_VOLUMES[slug], rel=0.005)
+    assert estimate.voxel_volume == pytest.approx(ANALYTIC_VOLUMES[slug], rel=0.005)
+
+
+@pytest.mark.parametrize("slug", ["esfera", "toro"])
+def test_mesh_error_decreases_with_resolution(slug):
+    function = EXAMPLES_BY_SLUG[slug].function
+    expected = ANALYTIC_VOLUMES[slug]
+
+    errors = [
+        abs(estimate_volume(function.expression, function.domain, n).mesh_volume - expected)
+        for n in (32, 64, 128)
+    ]
+
+    assert errors[0] > errors[1] > errors[2]
