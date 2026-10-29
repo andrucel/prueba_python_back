@@ -1,4 +1,5 @@
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
@@ -6,6 +7,10 @@ from app.db.models import User
 from app.users.schemas import UserCreate
 
 
+class UserAlreadyExistsError(Exception):
+    """El username o el email ya están registrados."""
+
+    
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
     return await session.scalar(select(User).where(User.username == username))
 
@@ -23,7 +28,11 @@ async def create_user(session: AsyncSession, data: UserCreate) -> User:
         hashed_password=hash_password(data.password),
     )
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as error:
+        await session.rollback()
+        raise UserAlreadyExistsError from error
     await session.refresh(user)
     return user
 
