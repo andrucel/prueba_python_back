@@ -24,7 +24,7 @@ def main() -> None:
             "voxel_volume": float(f"{estimate.voxel_volume:.10g}"),
             "mesh_volume": float(f"{estimate.mesh_volume:.10g}"),
         }
-    GOLDEN_PATH.write_text(json.dumps(golden, indent=2) + "\n", encoding="utf-8")
+    GOLDEN_PATH.write_text(json.dumps(golden, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(golden, indent=2))
 
 
