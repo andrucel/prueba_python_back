@@ -72,3 +72,17 @@ def test_check_accepts_readme_examples(expression):
 def test_check_rejects_forbidden_constructions(expression, message):
     with pytest.raises(ExpressionError, match=re.escape(message)):
         check_expression(expression)
+
+
+
+@pytest.mark.parametrize("expression", ["9**9**9", "2**10000", "10**400 * x"])
+def test_check_rejects_huge_constants_without_hanging(expression):
+    with pytest.raises(ExpressionError, match="demasiado grande"):
+        check_expression(expression)
+
+
+def test_integer_constants_are_evaluated_as_float():
+    evaluate = compile_expression("x + 1/2 + 2**3")
+    values = evaluate(np.zeros(2), np.zeros(2), np.zeros(2))
+
+    np.testing.assert_allclose(values, [8.5, 8.5])        
