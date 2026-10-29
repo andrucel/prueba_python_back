@@ -61,3 +61,13 @@ def test_voxel_volume_of_region_touching_the_border():
     estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
 
     assert estimate.voxel_volume == pytest.approx(4.0)
+
+    
+
+def test_mesh_volume_does_not_depend_on_position():
+    near = estimate_volume("x**2 + y**2 + z**2 - 1", [[-1.5, 1.5]] * 3, 64)
+    far = estimate_volume(
+        "(x - 600000)**2 + (y - 600000)**2 + (z - 600000)**2 - 1", [[599998.5, 600001.5]] * 3, 64
+    )
+
+    assert far.mesh_volume == pytest.approx(near.mesh_volume, rel=1e-6)
