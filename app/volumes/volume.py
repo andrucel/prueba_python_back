@@ -12,11 +12,18 @@ class VolumeEstimate:
     mesh_volume: float
     domain_volume: float
 
-
 def voxel_volume(grid: SampledGrid) -> float:
-    cell_volume = float(np.prod(grid.spacing))
-    return float(np.count_nonzero(grid.values <= 0)) * cell_volume
+    """Suma el volumen de la celda de cada muestra con f <= 0.
 
+    La celda de una muestra es el cubo centrado en ella, recortado al dominio: en las caras
+    solo la mitad queda dentro, por eso esas muestras pesan 1/2 en cada eje.
+    """
+    weights = [np.ones(n) for n in grid.shape]
+    for axis_weights in weights:
+        axis_weights[0] = axis_weights[-1] = 0.5
+    inside = (grid.values <= 0).astype(np.float64)
+    weighted_count = np.einsum("ijk,i,j,k->", inside, *weights)
+    return float(weighted_count * np.prod(grid.spacing))
 
 def mesh_volume(mesh: TriangleMesh) -> float:
     """Volumen encerrado por una malla cerrada (teorema de la divergencia, tetraedros con el origen)."""

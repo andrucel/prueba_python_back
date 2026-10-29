@@ -54,3 +54,10 @@ def test_mesh_volume_of_region_touching_the_border():
     estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
 
     assert estimate.mesh_volume == pytest.approx(4.0)
+
+    
+
+def test_voxel_volume_of_region_touching_the_border():
+    estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
+
+    assert estimate.voxel_volume == pytest.approx(4.0)
