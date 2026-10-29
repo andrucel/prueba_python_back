@@ -86,6 +86,11 @@ def _compile(expression: str) -> CodeType:
     except SyntaxError as error:
         raise ExpressionError(f"Sintaxis inválida: {error.msg}") from error
     _check_node(tree)
+    # Las constantes se evalúan como float: una potencia entera como 9**9**9 se calcularía con
+    # precisión arbitraria y bloquearía el proceso; en float desborda al instante.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant):
+            node.value = float(node.value)
     return compile(tree, "<expression>", "eval")
 
 
@@ -105,6 +110,8 @@ def check_expression(expression: str) -> None:
     evaluate = compile_expression(expression)
     try:
         evaluate(_PROBE, _PROBE, _PROBE)
+    except OverflowError as error:
+        raise ExpressionError("La expresión produce un número demasiado grande") from error
     except Exception as error:
         raise ExpressionError(f"No se pudo evaluar la expresión: {error}") from error
 
