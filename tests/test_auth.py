@@ -1,4 +1,8 @@
+import pytest
+
 from app.core.security import decode_access_token
+from app.users import service
+from app.users.schemas import UserCreate
 
 USER = {"username": "ana", "email": "ana@example.com", "password": "s3cret-pass"}
 
@@ -46,3 +50,34 @@ async def test_login_rejects_wrong_password(client):
     response = await client.post("/auth/token", data={"username": "ana", "password": "incorrecta"})
 
     assert response.status_code == 401
+
+
+
+async def test_register_rejects_duplicated_email(client):
+    await register(client)
+
+    response = await register(client, username="otra")
+
+    assert response.status_code == 409
+
+
+async def test_create_user_raises_on_unique_violation(db_session):
+    data = UserCreate(**USER)
+    await service.create_user(db_session, data)
+
+    with pytest.raises(service.UserAlreadyExistsError):
+        await service.create_user(db_session, data)
+
+
+
+
+async def test_register_returns_409_when_database_rejects_duplicate(client, monkeypatch):
+    async def never_exists(*_):
+        return False
+
+    monkeypatch.setattr(service, "exists_user", never_exists)
+    await register(client)
+
+    response = await register(client)
+
+    assert response.status_code == 409

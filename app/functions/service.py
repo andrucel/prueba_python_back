@@ -24,13 +24,12 @@ async def list_functions(session: AsyncSession, owner_id: int) -> Sequence[Impli
     return (await session.scalars(query)).all()
 
 
-async def get_function(
-    session: AsyncSession, function_id: int, owner_id: int | None = None
-) -> ImplicitFunction | None:
-    """Obtiene una función por id; si se indica ``owner_id`` restringe la búsqueda a ese dueño."""
-    query = select(ImplicitFunction).where(ImplicitFunction.id == function_id)
-    if owner_id is not None:
-        query = query.where(ImplicitFunction.owner_id == owner_id)
+async def get_function(session: AsyncSession, function_id: int, owner_id: int) -> ImplicitFunction | None:
+    """Obtiene una función por id, restringida a su propietario."""
+    query = select(ImplicitFunction).where(
+        ImplicitFunction.id == function_id,
+        ImplicitFunction.owner_id == owner_id,
+    )
     return await session.scalar(query)
 
 
