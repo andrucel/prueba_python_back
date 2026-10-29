@@ -181,3 +181,36 @@ El uso de asistentes de inteligencia artificial está permitido como herramienta
 3. **Validación crítica:** No asumas que el código generado por una IA es correcto únicamente porque "corre" o porque los tests existentes pasen en verde. Tu capacidad para verificar la exactitud de los resultados frente a valores teóricos, identificar posibles fallas de seguridad y optimizar el uso de recursos es el foco principal de la prueba.
 4. **Higiene del historial en Git:** Realiza tus commits manualmente y de forma atómica, asegurando que cada mensaje describa con precisión el diff correspondiente. El historial de commits debe reflejar un proceso de razonamiento gradual, no volcados masivos o automáticos.
 
+
+## Tabla de convergencia del volumen (tarea C)
+
+Error relativo frente al valor analítico: `100 · |calculado − exacto| / exacto`. Se regenera con:
+
+    uv run python -m scripts.convergencia
+
+| Función | Valor analítico | n | Volumen por malla | Error malla | Volumen por vóxeles | Error vóxeles |
+|---|---|---|---|---|---|---|
+| Esfera | 4.188790 | 32 | 4.159120 | 0.708 % | 4.241549 | 1.26 % |
+| Esfera | 4.188790 | 64 | 4.181670 | 0.17 % | 4.213800 | 0.597 % |
+| Esfera | 4.188790 | 128 | 4.187033 | 0.0419 % | 4.185905 | 0.0689 % |
+| Esfera | 4.188790 | 256 | 4.188355 | 0.0104 % | 4.190248 | 0.0348 % |
+| Toro | 1.233701 | 32 | 1.183143 | 4.1 % | 1.254339 | 1.67 % |
+| Toro | 1.233701 | 64 | 1.219294 | 1.17 % | 1.225786 | 0.642 % |
+| Toro | 1.233701 | 128 | 1.230457 | 0.263 % | 1.235441 | 0.141 % |
+| Toro | 1.233701 | 256 | 1.232844 | 0.0694 % | 1.232114 | 0.129 % |
+| Gyroide | 124.025107 | 32 | 124.025389 | 0.000227 % | 124.029270 | 0.00336 % |
+| Gyroide | 124.025107 | 64 | 124.025191 | 6.78e-05 % | 124.025603 | 0.0004 % |
+| Gyroide | 124.025107 | 128 | 124.025161 | 4.37e-05 % | 124.025167 | 4.88e-05 % |
+| Gyroide | 124.025107 | 256 | 124.025121 | 1.18e-05 % | 124.025114 | 6.03e-06 % |
+
+### Cómo se obtuvieron los valores de referencia
+
+- **Esfera de radio 1:** volumen de la esfera, 4/3 · π · r³ = 4.188790.
+- **Toro con R = 1 y r = 0.25:** teorema de Pappus, área de la sección (π · r²) por la longitud de la circunferencia que recorre su centro (2 · π · R): 2 · π² · R · r² = 1.233701.
+- **Gyroide en [0, 2π]³:** por simetría. La función cumple f(−x, −y, −z) = −f(x, y, z) y se repite cada 2π, así que la región f ≤ 0 y la región f ≥ 0 tienen el mismo volumen. Cada una ocupa la mitad de la caja: (2π)³ / 2 = 124.025107.
+
+### Lectura de la tabla
+
+- El volumen por malla converge con orden 2: al duplicar n, el error baja unas 4 veces (esfera: 0.71 % → 0.17 % → 0.042 % → 0.010 %).
+- El volumen por vóxeles converge más lento y de forma irregular, porque cuenta puntos (adentro o afuera) y la frontera cae en posiciones distintas en cada rejilla.
+- El gyroide da un error casi nulo desde n = 32 porque la simetría compensa los errores de las dos mitades.
