@@ -7,11 +7,11 @@
   "toro": {
     "resolution": 64,
     "voxel_volume": 1.225785552,
-    "mesh_volume": 1.219293727
+    "mesh_volume": 1.219293728
   },
   "gyroide": {
     "resolution": 64,
     "voxel_volume": 130.0292736,
-    "mesh_volume": 8.46802201e-05
+    "mesh_volume": 124.0251908
   }
 }

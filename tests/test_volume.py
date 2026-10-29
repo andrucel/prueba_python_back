@@ -47,3 +47,10 @@ async def test_volume_endpoint(client):
     body = response.json()
     assert body["mesh_volume"] == pytest.approx(GOLDEN["esfera"]["mesh_volume"], rel=1e-6)
     assert body["domain_volume"] == pytest.approx(27.0)
+
+
+
+def test_mesh_volume_of_region_touching_the_border():
+    estimate = estimate_volume("x", [[-1, 1], [-1, 1], [-1, 1]], 16)
+
+    assert estimate.mesh_volume == pytest.approx(4.0)
