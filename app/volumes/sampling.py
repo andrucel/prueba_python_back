@@ -27,12 +27,13 @@ def grid_origin(domain: list[list[float]]) -> Vector3:
 
 
 def grid_spacing(domain: list[list[float]], resolution: int) -> Vector3:
-    """Tamaño de celda por eje, calculado directamente del dominio sin materializar los ejes."""
+    """Distancia entre muestras por eje: ``resolution`` puntos dejan ``resolution - 1`` intervalos."""
     (x_min, x_max), (y_min, y_max), (z_min, z_max) = domain
+    intervals = resolution - 1
     return (
-        (x_max - x_min) / resolution,
-        (y_max - y_min) / resolution,
-        (z_max - z_min) / resolution,
+        (x_max - x_min) / intervals,
+        (y_max - y_min) / intervals,
+        (z_max - z_min) / intervals,
     )
 
 
@@ -52,3 +53,4 @@ def sample_function(expression: str, domain: list[list[float]], resolution: int)
         origin=grid_origin(domain),
         spacing=grid_spacing(domain, resolution),
     )
+

@@ -33,3 +33,10 @@ def test_first_index_runs_along_x():
     assert grid.values[1, 0, 0] == pytest.approx(0.25)
     assert grid.values[0, 1, 0] == pytest.approx(2.5)
     assert grid.values[0, 0, 1] == pytest.approx(25.0)
+
+
+
+def test_spacing_is_distance_between_samples():
+    grid = sample_function("x", [[0, 1], [0, 2], [0, 4]], 5)
+
+    assert grid.spacing == (0.25, 0.5, 1.0)
