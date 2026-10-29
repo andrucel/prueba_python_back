@@ -42,8 +42,9 @@ def build_axes(domain: list[list[float]], resolution: int) -> list[FloatArray]:
 
 def sample_function(expression: str, domain: list[list[float]], resolution: int) -> SampledGrid:
     axes = build_axes(domain, resolution)
-    # Indexado cartesiano: mismo convenio de ejes que el visor (three.js, X derecha / Y arriba).
-    x, y, z = np.meshgrid(*axes, indexing="xy")
+    # Indexado matricial: values[i, j, k] corresponde a (x_i, y_j, z_k), como documenta SampledGrid.
+    # Con indexing="xy" numpy intercambia los dos primeros ejes y la malla sale con x e y cambiados.
+    x, y, z = np.meshgrid(*axes, indexing="ij")
     values = compile_expression(expression)(x, y, z)
 
     return SampledGrid(

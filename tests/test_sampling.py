@@ -1,3 +1,5 @@
+import pytest
+
 from app.volumes.sampling import sample_function
 
 CUBE = [[-1.5, 1.5], [-1.5, 1.5], [-1.5, 1.5]]
@@ -22,3 +24,12 @@ def test_sample_corners_are_outside():
 
     assert grid.values[0, 0, 0] > 0
     assert grid.values[-1, -1, -1] > 0
+
+
+
+def test_first_index_runs_along_x():
+    grid = sample_function("x + 10*y + 100*z", [[0, 1], [0, 1], [0, 1]], 5)
+
+    assert grid.values[1, 0, 0] == pytest.approx(0.25)
+    assert grid.values[0, 1, 0] == pytest.approx(2.5)
+    assert grid.values[0, 0, 1] == pytest.approx(25.0)
