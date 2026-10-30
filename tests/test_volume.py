@@ -128,3 +128,11 @@ def test_undefined_points_count_as_outside():
 
     assert estimate.mesh_volume == pytest.approx(16.0, rel=0.05)
     assert estimate.voxel_volume == pytest.approx(16.0, rel=0.05)
+
+    
+
+def test_region_filling_the_whole_domain():
+    estimate = estimate_volume("x - 5", [[-2, 2]] * 3, 16)
+
+    assert estimate.mesh_volume == pytest.approx(64.0)
+    assert estimate.voxel_volume == pytest.approx(64.0)

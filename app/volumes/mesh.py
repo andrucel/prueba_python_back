@@ -27,7 +27,9 @@ class TriangleMesh:
 def extract_mesh(grid: SampledGrid) -> TriangleMesh:
     """Extrae la superficie f = 0 con marching cubes."""
     values = grid.values
-    if values.min() > ISO_LEVEL or values.max() < ISO_LEVEL:
+    # Sin ninguna muestra con f <= 0 no hay región. Si todas están dentro, la región es la caja
+    # entera y las tapas del relleno la cierran, así que no se descarta.
+    if not np.any(values <= ISO_LEVEL):
         return TriangleMesh(vertices=np.empty((0, 3)), faces=np.empty((0, 3), dtype=np.int64))
 
     # Donde f no está definida (NaN, p. ej. sqrt de un negativo) el punto no cumple f <= 0: se trata
