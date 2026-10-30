@@ -2,14 +2,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestLoggingMiddleware
 from app.db.session import engine, init_db
+from app.functions.parser import ExpressionError
 from app.functions.examples_router import router as examples_router
 from app.functions.router import router as functions_router
 from app.users.auth_router import router as auth_router
@@ -41,6 +42,14 @@ app.include_router(functions_router)
 app.include_router(volumes_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+
+@app.exception_handler(ExpressionError)
+async def expression_error_handler(request: Request, error: ExpressionError) -> JSONResponse:
+    # Una función guardada antes de la validación actual puede tener una expresión que ya no se
+    # acepta: es un problema de los datos de entrada (422), no un fallo del servidor (500).
+    logger.warning("invalid_stored_expression", path=request.url.path, error=str(error))
+    return JSONResponse(status_code=422, content={"detail": f"La expresión guardada no es válida: {error}"})
 
 @app.get("/health", tags=["health"])
 async def health() -> dict[str, str]:

@@ -1,3 +1,4 @@
+from app.db.models import ImplicitFunction
 from tests.helpers import register_and_login
 
 SPHERE = {
@@ -144,3 +145,19 @@ async def test_evaluate_undefined_point_has_unknown_inside(client):
     assert body["value"] is None
     assert body["is_finite"] is False
     assert body["is_inside"] is None
+    
+
+
+async def test_stored_invalid_expression_returns_422(client, db_session):
+    user_id, headers = await register_and_login(client, "ana")
+    function = ImplicitFunction(
+        owner_id=user_id, name="Antigua", expression="x.real", domain=[[-1, 1]] * 3, resolution=16
+    )
+    db_session.add(function)
+    await db_session.commit()
+
+    for path in ("volume", "mesh.bin", "evaluate?x=0&y=0&z=0"):
+        response = await client.get(f"/functions/{function.id}/{path}", headers=headers)
+
+        assert response.status_code == 422
+        assert "no es válida" in response.json()["detail"]
