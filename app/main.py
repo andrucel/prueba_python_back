@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
-from app.core.middleware import RequestLoggingMiddleware
+from app.core.middleware import RequestLoggingMiddleware, add_cors
 from app.db.session import engine, init_db
 from app.functions.examples_router import router as examples_router
 from app.functions.parser import ExpressionError
@@ -35,6 +35,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title=settings.name, version="0.1.0", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
+add_cors(app, settings.cors_origins)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(examples_router)
