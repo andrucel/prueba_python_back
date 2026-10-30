@@ -1,9 +1,11 @@
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
@@ -60,3 +62,17 @@ async def health() -> dict[str, str]:
 @app.get("/viewer", include_in_schema=False)
 async def viewer() -> FileResponse:
     return FileResponse(STATIC_DIR / "viewer" / "index.html")
+
+
+@lru_cache
+def render_panel(api_url: str) -> str:
+    # Se lee una sola vez por URL: así no se repite la lectura del disco en cada petición.
+    html = (STATIC_DIR / "panel" / "index.html").read_text(encoding="utf-8")
+    # json.dumps produce un literal de JavaScript válido; escapar "<" impide cerrar el <script>.
+    literal = json.dumps(api_url).replace("<", "\\u003c")
+    return html.replace("__PANEL_API_URL__", literal)
+
+
+@app.get("/panel", include_in_schema=False)
+async def panel() -> HTMLResponse:
+    return HTMLResponse(render_panel(settings.panel_api_url))

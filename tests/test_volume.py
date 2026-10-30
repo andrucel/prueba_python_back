@@ -158,3 +158,21 @@ async def test_volume_is_computed_outside_the_event_loop(client, monkeypatch):
     assert len(calls) == 1
     # El cálculo debe correr en otro hilo: así el event loop sigue atendiendo peticiones.
     assert calls[0] is not event_loop_thread
+
+
+async def test_volume_accepts_resolution_query(client):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions/examples/esfera", headers=headers)).json()
+    url = f"/functions/{created['id']}/volume"
+    function = EXAMPLES_BY_SLUG["esfera"].function
+
+    stored = (await client.get(url, headers=headers)).json()
+    coarse = (await client.get(url, params={"resolution": 32}, headers=headers)).json()
+    too_high = await client.get(url, params={"resolution": 100_000}, headers=headers)
+
+    assert stored["resolution"] == 64
+    assert coarse["resolution"] == 32
+    expected = estimate_volume(function.expression, function.domain, 32).mesh_volume
+    assert coarse["mesh_volume"] == pytest.approx(expected)
+    assert coarse["mesh_volume"] != pytest.approx(stored["mesh_volume"])
+    assert too_high.status_code == 422

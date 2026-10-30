@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel de resultados</title>
+  <style>
+    :root {
+      --bg: #11151c; --panel: #1b212b; --line: #2c3442; --text: #e6e9ef; --muted: #8b95a5;
+      --accent: #4f9cf9; --error: #f2706b; --ok: #4fc38a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; font: 14px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    aside { width: 300px; flex-shrink: 0; padding: 16px; background: var(--panel); display: flex; flex-direction: column; gap: 14px; }
+    main { flex: 1; min-width: 0; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    h1 { font-size: 17px; margin: 0; }
+    h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+    input, button { font: inherit; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+    button { background: var(--accent); border: none; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    form { display: flex; flex-direction: column; gap: 10px; }
+    ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    li button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; color: var(--text); }
+    li button:hover { border-color: var(--line); }
+    li button[aria-current="true"] { border-color: var(--accent); background: rgba(79, 156, 249, .12); }
+    li small { display: block; color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .card { background: var(--panel); border-radius: 8px; padding: 12px; }
+    .card span { display: block; color: var(--muted); font-size: 12px; }
+    .card output { display: block; font: 600 18px ui-monospace, monospace; margin-top: 4px; }
+    #surface { height: 420px; background: var(--panel); border-radius: 8px; overflow: hidden; position: relative; }
+    #surface canvas { display: block; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 8px; overflow: hidden; }
+    th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); font-family: ui-monospace, monospace; }
+    th { color: var(--muted); font-family: inherit; font-weight: 600; }
+    th:first-child, td:first-child { text-align: left; }
+    .error { color: var(--error); min-height: 1.4em; margin: 0; }
+    .muted { color: var(--muted); }
+    .hidden { display: none !important; }
+    @media (max-width: 760px) { body { flex-direction: column; } aside { width: 100%; } #surface { height: 300px; } }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <aside>
+    <h1>Panel de resultados</h1>
+    <form id="login">
+      <label>Usuario <input name="username" data-testid="login-username" autocomplete="username" required></label>
+      <label>Contraseña <input name="password" type="password" data-testid="login-password" autocomplete="current-password" required></label>
+      <button type="submit" data-testid="login-submit">Iniciar sesión</button>
+    </form>
+    <div id="session" class="hidden">
+      <h2>Mis funciones</h2>
+      <ul id="functions" data-testid="function-list"></ul>
+      <p id="no-functions" class="muted hidden">Todavía no tienes funciones.</p>
+      <button id="logout" type="button">Cerrar sesión</button>
+    </div>
+    <p id="error" class="error" data-testid="error-message" role="alert"></p>
+  </aside>
+
+  <main>
+    <section>
+      <h2 id="title">Selecciona una función</h2>
+      <div class="cards">
+        <div class="card"><span>Volumen por malla</span><output data-testid="volume-mesh">—</output></div>
+        <div class="card"><span>Volumen por vóxeles</span><output data-testid="volume-voxel">—</output></div>
+        <div class="card"><span>Volumen del dominio</span><output data-testid="volume-domain">—</output></div>
+        <div class="card"><span>Diferencia relativa (malla vs. vóxeles)</span><output data-testid="volume-difference">—</output></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Superficie f = 0</h2>
+      <div id="surface" data-testid="surface-view"></div>
+    </section>
+
+    <section>
+      <h2>Tabla de convergencia</h2>
+      <table data-testid="convergence-table">
+        <thead><tr><th>n</th><th>Volumen por malla</th><th>Volumen por vóxeles</th></tr></thead>
+        <tbody id="convergence"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    // URL de la API: la inyecta el servidor desde APP_PANEL_API_URL; vacía significa "mismo origen".
+    const API_URL = __PANEL_API_URL__;
+    const RESOLUTIONS = [32, 64, 128, 256];
+    const TOKEN_KEY = "panel-token";
+    const STATUS_MESSAGES = {
+      401: "La sesión no es válida o expiró. Inicia sesión de nuevo.",
+      404: "La función no existe o no te pertenece.",
+      422: "La API rechazó los datos.",
+      503: "El servicio no está disponible en este momento. Inténtalo más tarde.",
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const field = (testId) => document.querySelector(`[data-testid="${testId}"]`);
+    let token = readToken();
+    let selection = 0; // cambia con cada función elegida; descarta respuestas de una selección anterior
+
+    function readToken() { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } }
+    function saveToken(value) {
+      token = value;
+      try { value ? sessionStorage.setItem(TOKEN_KEY, value) : sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    }
+
+    function showError(message) { field("error-message").textContent = message; }
+    function clearError() { field("error-message").textContent = ""; }
+
+    class NotFiniteError extends Error {}
+
+    // Al menos 4 cifras significativas, como pide el contrato del panel.
+    function formatNumber(value, label) {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new NotFiniteError(`${label}: el valor no es un número finito.`);
+      }
+      return value.toPrecision(6);
+    }
+
+    function describeDetail(detail) {
+      if (typeof detail === "string") return detail;
+      if (Array.isArray(detail)) return detail.map((item) => item.msg).filter(Boolean).join("; ");
+      return "";
+    }
+
+    async function api(path, { binary = false, init = {} } = {}) {
+      const headers = { ...(init.headers ?? {}) };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      let response;
+      try {
+        response = await fetch(`${API_URL}${path}`, { ...init, headers });
+      } catch {
+        throw new Error("No se pudo conectar con la API. Revisa que el servidor esté encendido.");
+      }
+      if (!response.ok) {
+        let detail = "";
+        try { detail = describeDetail((await response.json()).detail); } catch {}
+        if (response.status === 401) logout();
+        const base = STATUS_MESSAGES[response.status] ?? `La API respondió con el error ${response.status}.`;
+        throw new Error(detail ? `${base} (${detail})` : base);
+      }
+      return binary ? response.arrayBuffer() : response.json();
+    }
+
+    // ---------- Vista 3D ----------
+    const surface = $("#surface");
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    surface.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b212b);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(3, 5, 4);
+    scene.add(sun);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    let currentMesh = null;
+
+    function resize() {
+      const { clientWidth: width, clientHeight: height } = surface;
+      renderer.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(surface);
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+    // Formato IMSH versión 2 (app/volumes/binary.py): cabecera de 28 bytes, vértices f32, caras u32.
+    function decodeMesh(buffer) {
+      const view = new DataView(buffer);
+      const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+      const version = view.getUint16(4, true);
+      if (magic !== "IMSH" || version !== 2) throw new Error("Formato de malla no soportado.");
+      const vertexCount = view.getUint32(8, true);
+      const faceCount = view.getUint32(12, true);
+      const vertices = new Float32Array(buffer, 28, vertexCount * 3);
+      const faces = new Uint32Array(buffer, 28 + vertices.byteLength, faceCount * 3);
+      return { vertices, faces };
+    }
+
+    function clearSurface() {
+      if (!currentMesh) return;
+      scene.remove(currentMesh);
+      currentMesh.geometry.dispose();
+      currentMesh = null;
+    }
+
+    function showMesh({ vertices, faces }) {
+      clearSurface();
+      if (faces.length === 0) return;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+      geometry.setIndex(new THREE.BufferAttribute(faces, 1));
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+      const material = new THREE.MeshStandardMaterial({ color: 0x4f9cf9, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide });
+      currentMesh = new THREE.Mesh(geometry, material);
+      scene.add(currentMesh);
+      // Los vértices llegan relativos al origen de la malla: la cámara apunta a su esfera envolvente.
+      const { center, radius } = geometry.boundingSphere;
+      controls.target.copy(center);
+      camera.position.copy(center).add(new THREE.Vector3(radius * 1.8, radius * 1.4, radius * 2.2));
+      camera.near = radius / 100;
+      camera.far = radius * 100;
+      camera.updateProjectionMatrix();
+    }
+
+    // ---------- Volúmenes ----------
+    function resetVolumes() {
+      for (const id of ["volume-mesh", "volume-voxel", "volume-domain", "volume-difference"]) field(id).textContent = "—";
+    }
+
+    function showVolumes(volume) {
+      field("volume-mesh").textContent = formatNumber(volume.mesh_volume, "Volumen por malla");
+      field("volume-voxel").textContent = formatNumber(volume.voxel_volume, "Volumen por vóxeles");
+      field("volume-domain").textContent = formatNumber(volume.domain_volume, "Volumen del dominio");
+      const difference = (100 * Math.abs(volume.mesh_volume - volume.voxel_volume)) / Math.abs(volume.mesh_volume);
+      field("volume-difference").textContent = `${formatNumber(difference, "Diferencia relativa")} %`;
+    }
+
+    // ---------- Tabla de convergencia ----------
+    function buildConvergenceRows() {
+      const body = $("#convergence");
+      body.innerHTML = "";
+      for (const n of RESOLUTIONS) {
+        const row = document.createElement("tr");
+        row.dataset.testid = "convergence-row";
+        row.dataset.n = String(n);
+        row.innerHTML = `<td>${n}</td><td data-testid="convergence-mesh">—</td><td data-testid="convergence-voxel">—</td>`;
+        body.append(row);
+      }
+    }
+
+    async function fillConvergence(functionId, current) {
+      const errors = [];
+      // Una resolución a la vez: n = 256 ya es un cálculo pesado y no conviene lanzarlos en paralelo.
+      for (const n of RESOLUTIONS) {
+        if (current !== selection) return;
+        const row = document.querySelector(`[data-testid="convergence-row"][data-n="${n}"]`);
+        const meshCell = row.querySelector('[data-testid="convergence-mesh"]');
+        const voxelCell = row.querySelector('[data-testid="convergence-voxel"]');
+        meshCell.textContent = voxelCell.textContent = "calculando…";
+        try {
+          const volume = await api(`/functions/${functionId}/volume?resolution=${n}`);
+          if (current !== selection) return;
+          meshCell.textContent = formatNumber(volume.mesh_volume, `Malla con n = ${n}`);
+          voxelCell.textContent = formatNumber(volume.voxel_volume, `Vóxeles con n = ${n}`);
+        } catch (error) {
+          if (current !== selection) return;
+          meshCell.textContent = voxelCell.textContent = "error";
+          errors.push(error.message);
+        }
+      }
+      // Si las cuatro filas fallan por la misma causa, el mensaje se muestra una sola vez.
+      if (errors.length && current === selection) showError([...new Set(errors)].join(" "));
+    }
+
+    // ---------- Selección ----------
+    async function selectFunction(fn, button) {
+      const current = ++selection;
+      clearError();
+      resetVolumes();
+      clearSurface();
+      buildConvergenceRows();
+      document.querySelectorAll('[data-testid="function-item"]').forEach((item) => item.setAttribute("aria-current", "false"));
+      button.setAttribute("aria-current", "true");
+      $("#title").textContent = `${fn.name} · resolución ${fn.resolution}`;
+
+      const problems = [];
+      const [volume, mesh] = await Promise.allSettled([
+        api(`/functions/${fn.id}/volume`),
+        api(`/functions/${fn.id}/mesh.bin`, { binary: true }),
+      ]);
+      if (current !== selection) return;
+      if (volume.status === "fulfilled") {
+        try { showVolumes(volume.value); } catch (error) { problems.push(error.message); }
+      } else {
+        problems.push(volume.reason.message);
+      }
+      if (mesh.status === "fulfilled") {
+        try { showMesh(decodeMesh(mesh.value)); } catch (error) { problems.push(error.message); }
+      } else {
+        problems.push(mesh.reason.message);
+      }
+      if (problems.length) showError([...new Set(problems)].join(" "));
+      await fillConvergence(fn.id, current);
+    }
+
+    function renderFunctions(functions) {
+      const list = field("function-list");
+      list.innerHTML = "";
+      $("#no-functions").classList.toggle("hidden", functions.length > 0);
+      for (const fn of functions) {
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.testid = "function-item";
+        button.setAttribute("aria-current", "false");
+        const name = document.createElement("strong");
+        name.textContent = fn.name;
+        const expression = document.createElement("small");
+        expression.textContent = fn.expression;
+        button.append(name, expression);
+        button.addEventListener("click", () => selectFunction(fn, button));
+        item.append(button);
+        list.append(item);
+      }
+    }
+
+    // ---------- Sesión ----------
+    async function showSession() {
+      $("#login").classList.add("hidden");
+      $("#session").classList.remove("hidden");
+      renderFunctions(await api("/functions"));
+    }
+
+    function logout() {
+      saveToken(null);
+      selection++;
+      $("#session").classList.add("hidden");
+      $("#login").classList.remove("hidden");
+      field("function-list").innerHTML = "";
+      $("#title").textContent = "Selecciona una función";
+      resetVolumes();
+      clearSurface();
+      buildConvergenceRows();
+    }
+
+    $("#login").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+      const submit = field("login-submit");
+      submit.disabled = true;
+      try {
+        const data = await api("/auth/token", { init: { method: "POST", body: new URLSearchParams(new FormData(event.target)) } });
+        saveToken(data.access_token);
+        await showSession();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    $("#logout").addEventListener("click", () => { clearError(); logout(); });
+
+    buildConvergenceRows();
+    if (token) showSession().catch((error) => showError(error.message));
+  </script>
+</body>
+</html>

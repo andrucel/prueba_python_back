@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Vacío: solo se aceptan peticiones del mismo origen. Ejemplo: ["http://localhost:5173"]
     cors_origins: list[str] = []
 
+    # URL base de la API que usa el panel de /panel. Vacía: el panel llama al mismo origen que lo sirve.
+    panel_api_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
