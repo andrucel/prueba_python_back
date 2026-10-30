@@ -121,3 +121,10 @@ async def test_volume_and_mesh_are_recomputed_after_update(client):
 
     assert volume_after["mesh_volume"] == pytest.approx(volume_before["mesh_volume"] / 8, rel=0.05)
     assert mesh_after != mesh_before
+    
+
+def test_undefined_points_count_as_outside():
+    estimate = estimate_volume("sqrt(x) - 1", [[-2, 2]] * 3, 64)
+
+    assert estimate.mesh_volume == pytest.approx(16.0, rel=0.05)
+    assert estimate.voxel_volume == pytest.approx(16.0, rel=0.05)
