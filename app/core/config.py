@@ -21,7 +21,8 @@ class Settings(BaseSettings):
 
     default_resolution: int = 64
     min_resolution: int = 8
-    max_resolution: int = 2048
+    # 2048³ muestras en float64 ocupan ~68 GB por arreglo; 256³ ocupan ~134 MB.
+    max_resolution: int = 256
     max_expression_length: int = 500
 
     cache_max_items: int = 128

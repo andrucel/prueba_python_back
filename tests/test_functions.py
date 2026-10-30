@@ -1,3 +1,4 @@
+from app.core.config import get_settings
 from app.db.models import ImplicitFunction
 from tests.helpers import register_and_login
 
@@ -83,14 +84,15 @@ async def test_evaluate_point_inside_and_on_surface(client):
     assert outside["is_inside"] is False
 
 
-async def test_create_accepts_high_resolution(client):
+async def test_create_respects_configured_max_resolution(client):
     _, headers = await register_and_login(client, "ana")
+    max_resolution = get_settings().max_resolution
 
-    response = await client.post("/functions", json={**SPHERE, "resolution": 1024}, headers=headers)
+    accepted = await client.post("/functions", json={**SPHERE, "resolution": max_resolution}, headers=headers)
+    rejected = await client.post("/functions", json={**SPHERE, "resolution": max_resolution + 1}, headers=headers)
 
-    assert response.status_code == 201
-    assert response.json()["resolution"] == 1024
-
+    assert accepted.status_code == 201
+    assert rejected.status_code == 422
 
 
 async def test_create_rejects_forbidden_construction_with_clear_message(client):
