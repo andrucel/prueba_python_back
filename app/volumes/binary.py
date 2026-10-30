@@ -33,6 +33,9 @@ FACE_DTYPE = np.dtype("<u4")
 
 def encode_mesh(mesh: TriangleMesh) -> bytes:
     origin = mesh.vertices.min(axis=0) if not mesh.is_empty else np.zeros(3)
+    # El origen viaja en float32: se redondea antes de restarlo para que origen + relativo
+    # reconstruya el vértice original (lejos de 0, float32 solo distingue pasos de ~0.03).
+    origin = origin.astype(VERTEX_DTYPE).astype(np.float64)
     relative = (mesh.vertices - origin).astype(VERTEX_DTYPE)
     faces = mesh.faces.astype(FACE_DTYPE)
 

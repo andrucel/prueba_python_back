@@ -67,3 +67,15 @@ def test_roundtrip_supports_more_than_65535_vertices():
     decoded = decode_mesh(encode_mesh(mesh))
 
     np.testing.assert_array_equal(decoded.faces, faces)
+
+
+
+def test_roundtrip_far_from_origin_keeps_precision():
+    grid = sample_function(
+        "(x - 600000.3)**2 + (y - 600000.3)**2 + (z - 600000.3)**2 - 1", [[599999.3, 600001.3]] * 3, 32
+    )
+    mesh = extract_mesh(grid)
+
+    decoded = decode_mesh(encode_mesh(mesh))
+
+    np.testing.assert_allclose(decoded.vertices, mesh.vertices, rtol=0, atol=1e-4)
