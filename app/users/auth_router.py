@@ -19,7 +19,11 @@ async def register(data: UserCreate, session: SessionDep) -> UserRead:
         logger.warning("register_conflict", username=data.username)
         raise HTTPException(status.HTTP_409_CONFLICT, detail="El usuario o el email ya existen")
 
-    user = await service.create_user(session, data)
+    try:
+        user = await service.create_user(session, data)
+    except service.UserAlreadyExistsError:
+        logger.warning("register_conflict", username=data.username)
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="El usuario o el email ya existen")
     logger.info("user_registered", user_id=user.id)
     return UserRead.model_validate(user)
 

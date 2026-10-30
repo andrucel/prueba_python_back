@@ -2,7 +2,8 @@ import time
 import uuid
 
 import structlog
-from fastapi import Request, Response
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.logging import get_logger
@@ -33,3 +34,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
         response.headers["X-Request-ID"] = request_id
         return response
+
+
+def add_cors(app: FastAPI, origins: list[str]) -> None:
+    """Permite que un front servido desde otro origen llame a la API, solo desde ``origins``."""
+    if origins:
+        app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])

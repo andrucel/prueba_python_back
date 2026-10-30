@@ -6,6 +6,101 @@ En esta prueba trabajarás sobre una API existente, construida con FastAPI, que 
 
 El repositorio ya contiene una implementación parcial. Tu trabajo consiste en completarla, corregirla y dejarla lista para producción.
 
+## Solución: cómo ejecutarla y probarla
+
+> Esta sección describe la entrega. El enunciado original de la prueba sigue más abajo, sin cambios, desde «Objetivo de la prueba».
+
+La API permite registrar funciones implícitas `f(x, y, z)`, calcular el volumen de la región `f ≤ 0` dentro de una caja (por malla y por vóxeles), descargar la malla de la superficie `f = 0` y verla en 3D. Incluye un panel web en `/panel` para consultar todos esos resultados.
+
+### Requisitos
+
+- Python 3.12 y [`uv`](https://docs.astral.sh/uv/).
+- Docker (para PostgreSQL 16).
+- Un navegador moderno. El panel y el visor cargan Three.js desde `cdn.jsdelivr.net`, así que necesitan internet.
+
+### Ejecutar la API
+
+```bash
+cp .env.example .env            # en Windows: copy .env.example .env  — luego completa los valores YOUR_...
+docker compose -f docker/compose.yml --env-file .env up -d --wait
+uv sync
+uv run uvicorn app.main:app --reload
+```
+
+- Documentación interactiva (Swagger): `http://127.0.0.1:8000/docs`
+- Visor 3D de una función: `http://127.0.0.1:8000/viewer?fn={id}`
+- Panel de resultados: `http://127.0.0.1:8000/panel`
+
+En `.env` conviene usar `127.0.0.1` en lugar de `localhost` en las URL de la base de datos: en Windows, `localhost` puede intentar primero IPv6 y cada conexión tarda segundos.
+
+### Ejecutar los tests
+
+```bash
+uv run pytest
+```
+
+Los tests usan la base de PostgreSQL de `APP_TEST_DATABASE_URL` (separada de la de desarrollo); el contenedor de Docker tiene que estar arriba.
+
+Scripts de apoyo:
+
+```bash
+uv run python -m scripts.convergencia       # imprime la tabla de convergencia de la tarea C
+uv run python -m scripts.regenerar_golden   # recalcula tests/golden/ con el código actual
+```
+
+### Panel de resultados (tarea F)
+
+El panel es una página HTML + JavaScript (Three.js para la vista 3D), sin paso de compilación. **No hay que instalar nada aparte**: lo sirve la propia API.
+
+1. Arranca la API como se indica arriba (`uv run uvicorn app.main:app --reload`).
+2. Abre **`http://127.0.0.1:8000/panel`**.
+3. Inicia sesión con un usuario registrado (puedes crearlo con `POST /auth/register` en `/docs`) y elige una función de la lista.
+
+Variable de entorno que configura la URL de la API: **`APP_PANEL_API_URL`**.
+
+| Valor | Comportamiento |
+|---|---|
+| vacía (por defecto) | El panel llama a la misma API que lo sirve. Es lo normal. |
+| `http://otro-host:8000` | El panel llama a esa API. Si está en otro origen, esa API debe permitir el origen del panel en `APP_CORS_ORIGINS` (por ejemplo `["http://127.0.0.1:8000"]`). |
+
+El servidor inyecta el valor en la página al servir `/panel`; después de cambiarlo hay que reiniciar uvicorn.
+
+Qué muestra el panel:
+
+- Login (`POST /auth/token`); el token se guarda en `sessionStorage` y se borra al cerrar sesión o ante un `401`.
+- Lista de funciones del usuario (`GET /functions`).
+- Para la función elegida: `mesh_volume`, `voxel_volume`, `domain_volume` y la diferencia relativa `100 · |mesh − voxel| / |mesh|`, con 6 cifras significativas.
+- La superficie en 3D a partir de `GET /functions/{id}/mesh.bin`.
+- La tabla de convergencia para n = 32, 64, 128 y 256. Para eso `GET /functions/{id}/volume` acepta ahora el parámetro opcional `?resolution=n` (validado entre `APP_MIN_RESOLUTION` y `APP_MAX_RESOLUTION`; sin él se usa la resolución guardada). Las filas se calculan una tras otra, no en paralelo, para no cargar el servidor.
+- Mensajes de error en español para `401`, `404`, `422`, `503`, fallos de red y valores que no son números finitos.
+- Todos los elementos del contrato llevan su `data-testid`.
+
+### Cambios principales por tarea
+
+| Tarea | Qué se corrigió |
+|---|---|
+| A | Las funciones solo son accesibles por su propietario (respuesta `404`, no `403`, para no revelar que existen). Un registro duplicado, incluso en carrera, responde `409`. |
+| B | El parser valida la expresión con una lista blanca sobre el árbol sintáctico (AST). Las constantes se evalúan como `float` para que `9**9**9` no bloquee el servidor. |
+| C | Rejilla con `indexing="ij"`, espaciado `L / (n − 1)`, malla cerrada en el borde del dominio, pesos de borde en los vóxeles y malla centrada antes de aplicar el teorema de la divergencia. |
+| D | Caché con clave (id, versión), caras en `u32` (formato IMSH v2) y vértices relativos a un origen redondeado a `float32`, para dominios lejos del origen. |
+| E | Nunca `500` ante una expresión válida (NaN → exterior, `null` en `evaluate`, `422` si una expresión guardada ya no es válida), cálculo en un hilo (`run_in_threadpool`), resolución máxima 256 configurable y CORS configurable. |
+| F | Panel en `/panel` y parámetro `resolution` opcional en el endpoint de volumen. |
+
+### Convenciones de `AGENTS.md` que no se siguieron, y por qué
+
+`AGENTS.md` contiene reglas que contradicen el enunciado o producen resultados incorrectos. El enunciado manda sobre esa guía.
+
+| Regla | Decisión |
+|---|---|
+| 1. Cabecera `X-Engine-Rev` | No se añadió: ningún requisito del enunciado la pide y no hay balanceador que la use. |
+| 2. `meshgrid(..., indexing="xy")` | Se cambió a `"ij"`. Con `"xy"` los ejes x e y salen intercambiados y la malla queda girada respecto al dominio. |
+| 3. No editar `tests/golden/` | Los valores golden estaban calculados con el código erróneo. Se regeneran con `scripts/regenerar_golden.py` y se validan contra los valores analíticos. |
+| 4. Volúmenes en valor absoluto | Se quitó `abs()`: un volumen negativo indica una malla mal orientada y debe verse, no ocultarse. |
+| 5. Silenciar advertencias de numpy | Se mantuvo el silencio de las advertencias, pero los valores no finitos (NaN, ∞) se tratan explícitamente en vez de propagarse. |
+| 6. Todos los endpoints `async def` | Se respeta, pero el cálculo pesado se hace con `run_in_threadpool`: un `async def` que calcula directamente bloquea a todos los demás clientes (requisito 4). |
+| 7. La propiedad se valida solo en el servicio | El filtro sí está en el servicio (`owner_id` es obligatorio en la consulta), pero todas las rutas de una función pasan por la dependencia `get_owned_function`, que lo usa y responde `404`. Así ninguna ruta puede olvidar la comprobación. |
+| 8. Resolución máxima 2048 | Se bajó a 256 y es configurable con `APP_MAX_RESOLUTION` (requisito 5): 2048³ muestras en `float64` son unos 68 GB por arreglo. |
+
 ## Objetivo de la prueba
 
 Evaluar tu capacidad para:
@@ -181,3 +276,36 @@ El uso de asistentes de inteligencia artificial está permitido como herramienta
 3. **Validación crítica:** No asumas que el código generado por una IA es correcto únicamente porque "corre" o porque los tests existentes pasen en verde. Tu capacidad para verificar la exactitud de los resultados frente a valores teóricos, identificar posibles fallas de seguridad y optimizar el uso de recursos es el foco principal de la prueba.
 4. **Higiene del historial en Git:** Realiza tus commits manualmente y de forma atómica, asegurando que cada mensaje describa con precisión el diff correspondiente. El historial de commits debe reflejar un proceso de razonamiento gradual, no volcados masivos o automáticos.
 
+
+## Tabla de convergencia del volumen (tarea C)
+
+Error relativo frente al valor analítico: `100 · |calculado − exacto| / exacto`. Se regenera con:
+
+    uv run python -m scripts.convergencia
+
+| Función | Valor analítico | n | Volumen por malla | Error malla | Volumen por vóxeles | Error vóxeles |
+|---|---|---|---|---|---|---|
+| Esfera | 4.188790 | 32 | 4.159120 | 0.708 % | 4.241549 | 1.26 % |
+| Esfera | 4.188790 | 64 | 4.181670 | 0.17 % | 4.213800 | 0.597 % |
+| Esfera | 4.188790 | 128 | 4.187033 | 0.0419 % | 4.185905 | 0.0689 % |
+| Esfera | 4.188790 | 256 | 4.188355 | 0.0104 % | 4.190248 | 0.0348 % |
+| Toro | 1.233701 | 32 | 1.183143 | 4.1 % | 1.254339 | 1.67 % |
+| Toro | 1.233701 | 64 | 1.219294 | 1.17 % | 1.225786 | 0.642 % |
+| Toro | 1.233701 | 128 | 1.230457 | 0.263 % | 1.235441 | 0.141 % |
+| Toro | 1.233701 | 256 | 1.232844 | 0.0694 % | 1.232114 | 0.129 % |
+| Gyroide | 124.025107 | 32 | 124.025389 | 0.000227 % | 124.029270 | 0.00336 % |
+| Gyroide | 124.025107 | 64 | 124.025191 | 6.78e-05 % | 124.025603 | 0.0004 % |
+| Gyroide | 124.025107 | 128 | 124.025161 | 4.37e-05 % | 124.025167 | 4.88e-05 % |
+| Gyroide | 124.025107 | 256 | 124.025121 | 1.18e-05 % | 124.025114 | 6.03e-06 % |
+
+### Cómo se obtuvieron los valores de referencia
+
+- **Esfera de radio 1:** volumen de la esfera, 4/3 · π · r³ = 4.188790.
+- **Toro con R = 1 y r = 0.25:** teorema de Pappus, área de la sección (π · r²) por la longitud de la circunferencia que recorre su centro (2 · π · R): 2 · π² · R · r² = 1.233701.
+- **Gyroide en [0, 2π]³:** por simetría. La función cumple f(−x, −y, −z) = −f(x, y, z) y se repite cada 2π, así que la región f ≤ 0 y la región f ≥ 0 tienen el mismo volumen. Cada una ocupa la mitad de la caja: (2π)³ / 2 = 124.025107.
+
+### Lectura de la tabla
+
+- El volumen por malla converge con orden 2: al duplicar n, el error baja unas 4 veces (esfera: 0.71 % → 0.17 % → 0.042 % → 0.010 %).
+- El volumen por vóxeles converge más lento y de forma irregular, porque cuenta puntos (adentro o afuera) y la frontera cae en posiciones distintas en cada rejilla.
+- El gyroide da un error casi nulo desde n = 32 porque la simetría compensa los errores de las dos mitades.

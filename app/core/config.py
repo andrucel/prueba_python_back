@@ -21,10 +21,18 @@ class Settings(BaseSettings):
 
     default_resolution: int = 64
     min_resolution: int = 8
-    max_resolution: int = 2048
+    # 2048³ muestras en float64 ocupan ~68 GB por arreglo; 256³ ocupan ~134 MB.
+    max_resolution: int = 256
     max_expression_length: int = 500
 
     cache_max_items: int = 128
+
+    # Orígenes desde los que un front en otro dominio o puerto puede llamar a la API (CORS).
+    # Vacío: solo se aceptan peticiones del mismo origen. Ejemplo: ["http://localhost:5173"]
+    cors_origins: list[str] = []
+
+    # URL base de la API que usa el panel de /panel. Vacía: el panel llama al mismo origen que lo sirve.
+    panel_api_url: str = ""
 
 
 @lru_cache

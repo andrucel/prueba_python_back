@@ -1,3 +1,5 @@
+from app.core.config import get_settings
+from app.db.models import ImplicitFunction
 from tests.helpers import register_and_login
 
 SPHERE = {
@@ -82,10 +84,82 @@ async def test_evaluate_point_inside_and_on_surface(client):
     assert outside["is_inside"] is False
 
 
-async def test_create_accepts_high_resolution(client):
+async def test_create_respects_configured_max_resolution(client):
     _, headers = await register_and_login(client, "ana")
+    max_resolution = get_settings().max_resolution
 
-    response = await client.post("/functions", json={**SPHERE, "resolution": 1024}, headers=headers)
+    accepted = await client.post("/functions", json={**SPHERE, "resolution": max_resolution}, headers=headers)
+    rejected = await client.post("/functions", json={**SPHERE, "resolution": max_resolution + 1}, headers=headers)
 
-    assert response.status_code == 201
-    assert response.json()["resolution"] == 1024
+    assert accepted.status_code == 201
+    assert rejected.status_code == 422
+
+
+async def test_create_rejects_forbidden_construction_with_clear_message(client):
+    _, headers = await register_and_login(client, "ana")
+    payload = {**SPHERE, "expression": "().__class__.__base__.__subclasses__().__len__() * 0 + x"}
+
+    response = await client.post("/functions", json=payload, headers=headers)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert detail["loc"] == ["body", "expression"]
+    assert "no permitida" in detail["msg"]
+
+
+async def test_update_rejects_forbidden_expression_and_keeps_previous(client):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions", json=SPHERE, headers=headers)).json()
+
+    response = await client.patch(f"/functions/{created['id']}", json={"expression": "x.real"}, headers=headers)
+    stored = (await client.get(f"/functions/{created['id']}", headers=headers)).json()
+
+    assert response.status_code == 422
+    assert stored["expression"] == SPHERE["expression"]
+
+
+async def test_evaluate_returns_null_for_infinite_value(client):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions/examples/hiperbola", headers=headers)).json()
+
+    response = await client.get(
+        f"/functions/{created['id']}/evaluate", params={"x": 0, "y": 0, "z": 0}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["value"] is None
+    assert body["is_finite"] is False
+    assert body["is_inside"] is False
+
+
+async def test_evaluate_undefined_point_has_unknown_inside(client):
+    _, headers = await register_and_login(client, "ana")
+    payload = {**SPHERE, "expression": "sqrt(x) - 1"}
+    created = (await client.post("/functions", json=payload, headers=headers)).json()
+
+    response = await client.get(
+        f"/functions/{created['id']}/evaluate", params={"x": -1, "y": 0, "z": 0}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["value"] is None
+    assert body["is_finite"] is False
+    assert body["is_inside"] is None
+    
+
+
+async def test_stored_invalid_expression_returns_422(client, db_session):
+    user_id, headers = await register_and_login(client, "ana")
+    function = ImplicitFunction(
+        owner_id=user_id, name="Antigua", expression="x.real", domain=[[-1, 1]] * 3, resolution=16
+    )
+    db_session.add(function)
+    await db_session.commit()
+
+    for path in ("volume", "mesh.bin", "evaluate?x=0&y=0&z=0"):
+        response = await client.get(f"/functions/{function.id}/{path}", headers=headers)
+
+        assert response.status_code == 422
+        assert "no es válida" in response.json()["detail"]
