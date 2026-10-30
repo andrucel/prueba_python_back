@@ -1,5 +1,5 @@
-from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Response
+from starlette.concurrency import run_in_threadpool
 
 from app.core.logging import get_logger
 from app.core.time import now_formatted

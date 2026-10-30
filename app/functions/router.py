@@ -1,7 +1,6 @@
 import math
 
 from fastapi import APIRouter, status
-from fastapi import APIRouter, status
 
 from app.core.logging import get_logger
 from app.functions import service
