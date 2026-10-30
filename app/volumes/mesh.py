@@ -10,6 +10,9 @@ from app.volumes.sampling import SampledGrid
 ISO_LEVEL = 0.0
 # Valor "exterior" (f > 0) con el que se rodea la rejilla para cerrar la superficie en el borde.
 OUTSIDE_VALUE = 1.0
+# Cota para los infinitos (p. ej. 1/x en x = 0): grande, pero lejos del máximo de float64 para que
+# la interpolación de marching cubes no desborde al restar dos valores extremos.
+INFINITY_BOUND = np.finfo(np.float64).max / 4
 
 
 @dataclass(frozen=True)
@@ -21,12 +24,17 @@ class TriangleMesh:
     def is_empty(self) -> bool:
         return len(self.faces) == 0
 
-
 def extract_mesh(grid: SampledGrid) -> TriangleMesh:
     """Extrae la superficie f = 0 con marching cubes."""
     values = grid.values
-    if values.min() > ISO_LEVEL or values.max() < ISO_LEVEL:
+    # Sin ninguna muestra con f <= 0 no hay región. Si todas están dentro, la región es la caja
+    # entera y las tapas del relleno la cierran, así que no se descarta.
+    if not np.any(values <= ISO_LEVEL):
         return TriangleMesh(vertices=np.empty((0, 3)), faces=np.empty((0, 3), dtype=np.int64))
+
+    # Donde f no está definida (NaN, p. ej. sqrt de un negativo) el punto no cumple f <= 0: se trata
+    # como exterior, igual que en el conteo de vóxeles. Los infinitos se acotan para poder interpolar.
+    values = np.nan_to_num(values, nan=OUTSIDE_VALUE, posinf=INFINITY_BOUND, neginf=-INFINITY_BOUND)
 
     # Si la región toca el borde del dominio, la superficie f = 0 queda abierta y el volumen por
     # divergencia no tiene sentido. Se rodea la rejilla con una capa exterior para que marching cubes

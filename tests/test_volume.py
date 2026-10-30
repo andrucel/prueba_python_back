@@ -1,11 +1,13 @@
 import json
+import threading
 from math import pi
 from pathlib import Path
 
 import pytest
 
 from app.functions.examples import EXAMPLES_BY_SLUG
-from app.volumes.volume import estimate_volume
+from app.volumes import router as volumes_router
+from app.volumes.volume import VolumeEstimate, estimate_volume
 from tests.helpers import register_and_login
 
 GOLDEN = json.loads((Path(__file__).parent / "golden" / "volumes.json").read_text())
@@ -121,3 +123,38 @@ async def test_volume_and_mesh_are_recomputed_after_update(client):
 
     assert volume_after["mesh_volume"] == pytest.approx(volume_before["mesh_volume"] / 8, rel=0.05)
     assert mesh_after != mesh_before
+    
+
+def test_undefined_points_count_as_outside():
+    estimate = estimate_volume("sqrt(x) - 1", [[-2, 2]] * 3, 64)
+
+    assert estimate.mesh_volume == pytest.approx(16.0, rel=0.05)
+    assert estimate.voxel_volume == pytest.approx(16.0, rel=0.05)
+
+    
+
+def test_region_filling_the_whole_domain():
+    estimate = estimate_volume("x - 5", [[-2, 2]] * 3, 16)
+
+    assert estimate.mesh_volume == pytest.approx(64.0)
+    assert estimate.voxel_volume == pytest.approx(64.0)
+
+
+async def test_volume_is_computed_outside_the_event_loop(client, monkeypatch):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions/examples/esfera", headers=headers)).json()
+    event_loop_thread = threading.current_thread()
+    calls = []
+
+    def fake_estimate(*_):
+        calls.append(threading.current_thread())
+        return VolumeEstimate(voxel_volume=1.0, mesh_volume=1.0, domain_volume=1.0)
+
+    monkeypatch.setattr(volumes_router, "estimate_volume", fake_estimate)
+
+    response = await client.get(f"/functions/{created['id']}/volume", headers=headers)
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    # El cálculo debe correr en otro hilo: así el event loop sigue atendiendo peticiones.
+    assert calls[0] is not event_loop_thread

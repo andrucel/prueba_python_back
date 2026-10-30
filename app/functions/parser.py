@@ -117,5 +117,6 @@ def check_expression(expression: str) -> None:
 
 
 def evaluate_point(expression: str, x: float, y: float, z: float) -> float:
+    """Evalúa f en un punto con numpy: 1/0 da inf y sqrt(-1) da nan en lugar de lanzar una excepción."""
     evaluate = compile_expression(expression)
-    return float(evaluate(x, y, z))
+    return float(evaluate(np.float64(x), np.float64(y), np.float64(z)))

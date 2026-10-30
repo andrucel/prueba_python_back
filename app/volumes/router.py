@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Response
+from starlette.concurrency import run_in_threadpool
 
 from app.core.logging import get_logger
 from app.core.time import now_formatted
@@ -16,9 +17,13 @@ logger = get_logger(__name__)
 
 @router.get("/{function_id}/volume")
 async def get_volume(function: OwnedFunction) -> VolumeResult:
-    estimate: VolumeEstimate = volume_cache.get_or_compute(
+    expression, domain, resolution = function.expression, function.domain, function.resolution
+    # El cálculo es CPU intensivo: se ejecuta en un hilo para no bloquear el event loop, que debe
+    # seguir atendiendo otras peticiones mientras tanto.
+    estimate: VolumeEstimate = await run_in_threadpool(
+        volume_cache.get_or_compute,
         (function.id, function.version),
-        lambda: estimate_volume(function.expression, function.domain, function.resolution),
+        lambda: estimate_volume(expression, domain, resolution),
     )
     logger.info(
         "volume_computed",
@@ -45,5 +50,5 @@ async def get_mesh(function: OwnedFunction) -> Response:
         logger.info("mesh_generated", function_id=function.id, faces=len(mesh.faces))
         return encode_mesh(mesh)
 
-    payload = mesh_cache.get_or_compute((function.id, function.version), build_payload)
+    payload = await run_in_threadpool(mesh_cache.get_or_compute, (function.id, function.version), build_payload)
     return Response(content=payload, media_type="application/octet-stream")
