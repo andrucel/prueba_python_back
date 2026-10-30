@@ -92,3 +92,10 @@ class PointEvaluation(BaseModel):
     z: float
     value: float
     is_inside: bool
+class PointEvaluation(BaseModel):
+    x: float
+    y: float
+    z: float
+    value: float | None = Field(description="Valor de f; null si no es un número finito")
+    is_finite: bool
+    is_inside: bool | None = Field(description="f <= 0; null si f no está definida (NaN)")

@@ -1,3 +1,6 @@
+import math
+
+from fastapi import APIRouter, status
 from fastapi import APIRouter, status
 
 from app.core.logging import get_logger
@@ -39,4 +42,13 @@ async def update_function(function: OwnedFunction, data: FunctionUpdate, session
 @router.get("/{function_id}/evaluate")
 async def evaluate_function(function: OwnedFunction, x: float, y: float, z: float) -> PointEvaluation:
     value = evaluate_point(function.expression, x, y, z)
-    return PointEvaluation(x=x, y=y, z=z, value=value, is_inside=value <= 0)
+    is_finite = math.isfinite(value)
+    # JSON no admite inf ni nan: se devuelve null y se indica con is_finite.
+    return PointEvaluation(
+        x=x,
+        y=y,
+        z=z,
+        value=value if is_finite else None,
+        is_finite=is_finite,
+        is_inside=None if math.isnan(value) else value <= 0,
+    )

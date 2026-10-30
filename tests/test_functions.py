@@ -113,3 +113,34 @@ async def test_update_rejects_forbidden_expression_and_keeps_previous(client):
 
     assert response.status_code == 422
     assert stored["expression"] == SPHERE["expression"]
+
+
+async def test_evaluate_returns_null_for_infinite_value(client):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions/examples/hiperbola", headers=headers)).json()
+
+    response = await client.get(
+        f"/functions/{created['id']}/evaluate", params={"x": 0, "y": 0, "z": 0}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["value"] is None
+    assert body["is_finite"] is False
+    assert body["is_inside"] is False
+
+
+async def test_evaluate_undefined_point_has_unknown_inside(client):
+    _, headers = await register_and_login(client, "ana")
+    payload = {**SPHERE, "expression": "sqrt(x) - 1"}
+    created = (await client.post("/functions", json=payload, headers=headers)).json()
+
+    response = await client.get(
+        f"/functions/{created['id']}/evaluate", params={"x": -1, "y": 0, "z": 0}, headers=headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["value"] is None
+    assert body["is_finite"] is False
+    assert body["is_inside"] is None
