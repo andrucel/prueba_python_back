@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Query, Response
 from starlette.concurrency import run_in_threadpool
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.time import now_formatted
 from app.functions.dependencies import OwnedFunction
@@ -13,27 +16,38 @@ from app.volumes.volume import VolumeEstimate, estimate_volume
 
 router = APIRouter(prefix="/functions", tags=["volumes"])
 logger = get_logger(__name__)
+settings = get_settings()
+
+ResolutionQuery = Annotated[
+    int | None,
+    Query(
+        ge=settings.min_resolution,
+        le=settings.max_resolution,
+        description="Resolución para este cálculo; por defecto, la guardada en la función",
+    ),
+]
 
 
 @router.get("/{function_id}/volume")
-async def get_volume(function: OwnedFunction) -> VolumeResult:
-    expression, domain, resolution = function.expression, function.domain, function.resolution
+async def get_volume(function: OwnedFunction, resolution: ResolutionQuery = None) -> VolumeResult:
+    expression, domain = function.expression, function.domain
+    resolution = function.resolution if resolution is None else resolution
     # El cálculo es CPU intensivo: se ejecuta en un hilo para no bloquear el event loop, que debe
     # seguir atendiendo otras peticiones mientras tanto.
     estimate: VolumeEstimate = await run_in_threadpool(
         volume_cache.get_or_compute,
-        (function.id, function.version),
+        (function.id, function.version, resolution),
         lambda: estimate_volume(expression, domain, resolution),
     )
     logger.info(
         "volume_computed",
         function_id=function.id,
-        resolution=function.resolution,
+        resolution=resolution,
         mesh_volume=estimate.mesh_volume,
     )
     return VolumeResult(
         function_id=function.id,
-        resolution=function.resolution,
+        resolution=resolution,
         voxel_volume=estimate.voxel_volume,
         mesh_volume=estimate.mesh_volume,
         domain_volume=estimate.domain_volume,
