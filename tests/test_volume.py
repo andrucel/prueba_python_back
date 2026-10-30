@@ -103,3 +103,21 @@ def test_mesh_error_decreases_with_resolution(slug):
     ]
 
     assert errors[0] > errors[1] > errors[2]
+    
+
+async def test_volume_and_mesh_are_recomputed_after_update(client):
+    _, headers = await register_and_login(client, "ana")
+    created = (await client.post("/functions/examples/esfera", headers=headers)).json()
+    volume_url = f"/functions/{created['id']}/volume"
+    mesh_url = f"/functions/{created['id']}/mesh.bin"
+    volume_before = (await client.get(volume_url, headers=headers)).json()
+    mesh_before = (await client.get(mesh_url, headers=headers)).content
+
+    await client.patch(
+        f"/functions/{created['id']}", json={"expression": "x**2 + y**2 + z**2 - 0.25"}, headers=headers
+    )
+    volume_after = (await client.get(volume_url, headers=headers)).json()
+    mesh_after = (await client.get(mesh_url, headers=headers)).content
+
+    assert volume_after["mesh_volume"] == pytest.approx(volume_before["mesh_volume"] / 8, rel=0.05)
+    assert mesh_after != mesh_before

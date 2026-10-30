@@ -26,7 +26,7 @@ def test_payload_size_matches_header():
 
     payload = encode_mesh(mesh)
 
-    expected = HEADER.size + mesh.vertices.size * 4 + mesh.faces.size * 2
+    expected = HEADER.size + mesh.vertices.size * 4 + mesh.faces.size * 4
     assert len(payload) == expected
     assert payload[:4] == MAGIC
 
@@ -55,3 +55,27 @@ async def test_mesh_endpoint_returns_binary(client):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/octet-stream"
     assert not decode_mesh(response.content).is_empty
+
+
+def test_roundtrip_supports_more_than_65535_vertices():
+    n_vertices = 70_000
+    vertices = np.zeros((n_vertices, 3))
+    vertices[:, 0] = np.arange(n_vertices)
+    faces = np.array([[0, 1, n_vertices - 1]])
+    mesh = TriangleMesh(vertices=vertices, faces=faces)
+
+    decoded = decode_mesh(encode_mesh(mesh))
+
+    np.testing.assert_array_equal(decoded.faces, faces)
+
+
+
+def test_roundtrip_far_from_origin_keeps_precision():
+    grid = sample_function(
+        "(x - 600000.3)**2 + (y - 600000.3)**2 + (z - 600000.3)**2 - 1", [[599999.3, 600001.3]] * 3, 32
+    )
+    mesh = extract_mesh(grid)
+
+    decoded = decode_mesh(encode_mesh(mesh))
+
+    np.testing.assert_allclose(decoded.vertices, mesh.vertices, rtol=0, atol=1e-4)
